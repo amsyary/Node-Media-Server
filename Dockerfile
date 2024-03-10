@@ -6,18 +6,23 @@ ARG VCS_REF
 LABEL org.label-schema.build-date="${BUILD_DATE}" \
       org.label-schema.name="node-media-server" \
       org.label-schema.description="A Node.js implementation of RTMP Server" \
-      org.label-schema.usage="https://github.com/illuspas/Node-Media-Server#readme" \
+      org.label-schema.usage="https://github.com/amsyary/Node-Media-Server#readme" \
       org.label-schema.vcs-ref="${VCS_REF}" \
-      org.label-schema.vcs-url="https://github.com/illuspas/Node-Media-Server" \
-      org.label-schema.vendor="illuspas" \
+      org.label-schema.vcs-url="https://github.com/amsyary/Node-Media-Server" \
+      org.label-schema.vendor="amsyari" \
       org.label-schema.version="2.5.0" \
-      maintainer="https://github.com/illuspas"
+      maintainer="https://github.com/amsyary"
 
 WORKDIR /usr/src/app
 
+RUN apk add --no-cache ffmpeg
+
+# Set environment variable for ffmpeg path
+ENV FFMPEG_PATH=/usr/bin/ffmpeg
+
 COPY package*.json ./
 
-RUN npm i
+RUN npm install
 
 COPY . .
 
