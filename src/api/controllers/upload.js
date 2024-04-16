@@ -1,5 +1,7 @@
 const fs = require("fs");
 const path = require("path");
+require("dotenv").config();
+const apiUrl = process.env.API_URL;
 function getVideos(req, res, next) {
   //    const transcodeFiles = fs.readdirSync(path.join(__dirname, "/uploads"));
   const transcodeFiles = fs.readdirSync("./media/live");
@@ -11,8 +13,8 @@ function getVideos(req, res, next) {
     .map((filename) => {
       return {
         streamId: filename,
-        url: `http://localhost:3000/live/${filename}/index.m3u8`,
-        thumbnailUrl: `http://localhost:3000/uploads/screenshots/${filename}.jpg`,
+        url: `${apiUrl}/live/${filename}/index.m3u8`,
+        thumbnailUrl: `${apiUrl}/live/screenshots/${filename}.jpg`,
       };
     });
   res.json(videos);

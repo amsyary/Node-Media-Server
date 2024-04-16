@@ -9,6 +9,7 @@ const path = require("path");
 const Http = require("http");
 const Https = require("https");
 const WebSocket = require("ws");
+
 const Express = require("express");
 const bodyParser = require("body-parser");
 const basicAuth = require("basic-auth-connect");
@@ -18,22 +19,23 @@ const HTTPS_PORT = 443;
 const HTTP_MEDIAROOT = "./media";
 const Logger = require("./node_core_logger");
 const context = require("./node_core_ctx");
-
+const NodeWebsocketServer = require("./node_websocket_server");
 const streamsRoute = require("./api/routes/streams");
 const serverRoute = require("./api/routes/server");
 const relayRoute = require("./api/routes/relay");
 const uploadRoute = require("./api/routes/upload");
-
+const StreamRoom = require("./stream_room");
 class NodeHttpServer {
   constructor(config) {
     this.port = config.http.port || HTTP_PORT;
     this.mediaroot = config.http.mediaroot || HTTP_MEDIAROOT;
     this.config = config;
     let app = Express();
+    this.clientCount = 0;
+    this.streamRooms = new Map();
+
     app.use(bodyParser.json());
-
     app.use(bodyParser.urlencoded({ extended: true }));
-
     app.all("*", (req, res, next) => {
       res.header("Access-Control-Allow-Origin", this.config.http.allow_origin);
       res.header(
@@ -116,6 +118,8 @@ class NodeHttpServer {
     this.wsServer = new WebSocket.Server({ server: this.httpServer });
 
     this.wsServer.on("connection", (ws, req) => {
+      this.clientCount++;
+      console.log("client count : " + this.clientCount);
       req.nmsConnectionType = "ws";
       this.onConnect(req, ws);
     });
@@ -125,6 +129,9 @@ class NodeHttpServer {
     });
     this.wsServer.on("error", (e) => {
       Logger.error(`Node Media WebSocket Server ${e}`);
+    });
+    this.wsServer.on("close", function close() {
+      console.log("disconnected");
     });
 
     if (this.httpsServer) {
@@ -138,22 +145,6 @@ class NodeHttpServer {
 
       this.httpsServer.on("close", () => {
         Logger.log("Node Media Https Server Close.");
-      });
-
-      this.wssServer = new WebSocket.Server({ server: this.httpsServer });
-
-      this.wssServer.on("connection", (ws, req) => {
-        req.nmsConnectionType = "ws";
-        this.onConnect(req, ws);
-      });
-
-      this.wssServer.on("listening", () => {
-        Logger.log(
-          `Node Media WebSocketSecure Server started on port: ${this.sport}`
-        );
-      });
-      this.wssServer.on("error", (e) => {
-        Logger.error(`Node Media WebSocketSecure Server ${e}`);
       });
     }
 
@@ -188,8 +179,68 @@ class NodeHttpServer {
   }
 
   onConnect(req, res) {
-    let session = new NodeFlvSession(this.config, req, res);
+    // let session = new NodeFlvSession(this.config, req, res);
+    // session.run();
+    res.on("message", this.handleMessage.bind(this, res));
+    res.on("close", this.onClose.bind(this, res));
+    let session = new NodeWebsocketServer(this.config, req, res);
     session.run();
+    // res.on("close", () => {
+    //   // Decrement client count
+    //   this.clientCount--;
+
+    //   // Send updated client count to all clients
+    //   console.log("disconnect : client count : " + this.clientCount);
+    // });
+  }
+  handleMessage(ws, message) {
+    const data = JSON.parse(message);
+    const { action, streamId } = data;
+    const initialViewerCount = 0;
+
+    if (action === "createRoom") {
+      const room = new StreamRoom(streamId, initialViewerCount);
+      room.addViewer(ws);
+      this.streamRooms.set(streamId, room);
+      this.updateViewerCount(streamId, initialViewerCount);
+    } else if (action === "joinRoom") {
+      const room = this.streamRooms.get(streamId);
+      if (room) {
+        room.addViewer(ws);
+        console.log("Joining room : " + JSON.stringify(room));
+        this.updateViewerCount(streamId, room.getViewerCount());
+      }
+    } else if (action === "leaveRoom") {
+      const room = this.streamRooms.get(streamId);
+      if (room) {
+        room.removeViewer(ws);
+        this.updateViewerCount(streamId, room.getViewerCount());
+      }
+    } else if (action === "deleteRoom") {
+      this.streamRooms.delete(streamId);
+      Logger.log(`Livestream Room View Count ${streamId} deleted`);
+    }
+  }
+  updateViewerCount(streamId, count) {
+    const room = this.streamRooms.get(streamId);
+    if (room) {
+      room.viewers.forEach((client) => {
+        client.send(JSON.stringify({ action: "updateViewerCount", count }));
+      });
+    } else {
+      console.log("Room not found");
+    }
+    console.log(`Stream ${streamId} viewer count: ${count}`);
+  }
+  onClose(ws) {
+    console.log("User disconnected");
+    this.clientCount--;
+    this.streamRooms.forEach((room, streamId) => {
+      if (room.viewers.has(ws)) {
+        room.removeViewer(ws);
+        this.updateViewerCount(streamId, room.getViewerCount());
+      }
+    });
   }
 }
 

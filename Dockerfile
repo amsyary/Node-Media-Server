@@ -19,6 +19,9 @@ RUN apk add --no-cache ffmpeg
 
 # Set environment variable for ffmpeg path
 ENV FFMPEG_PATH=/usr/bin/ffmpeg
+# Set Environment variable for domain name, we will override this when we run
+# the container
+ENV API_URL=http://localhost:3000
 
 COPY package*.json ./
 
