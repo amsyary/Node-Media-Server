@@ -70,6 +70,7 @@ class NodeHttpServer {
       app.use("/api/server", serverRoute(context));
       app.use("/api/relay", relayRoute(context));
       app.use("/api/videos", uploadRoute(context));
+      app.use("/live/screenshots", Express.static("./media/screenshots"));
     }
 
     app.use(Express.static(path.join(__dirname + "/public")));
